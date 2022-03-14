@@ -6,41 +6,30 @@ import matplotlib.pyplot as plt
 import requests
 import lime
 from lime import lime_tabular
+import json
 
 
-def request_prediction(model_uri, data):
-    headers = {"Content-Type": "application/json"}
-
-    data_json = {'data': data}
-    response = requests.request(
-        method='GET', headers=headers, url=model_uri, json=data_json)
-
-    if response.status_code != 200:
-        raise Exception(
-            "Request failed with status {}, {}".format(response.status_code, response.text))
-
-    return response.json()
-
-path = "C:\\Users\\toure\\Desktop\\OpenClassrooms\\Projet 7\\donnees\\"
-num_rows = 10000
-
-data_client = pd.read_csv(path+"donnees_traites.csv", nrows= num_rows)
-table_indic = pd.read_csv(path+"HomeCredit_columns_description.csv", encoding= 'unicode_escape')
-
-
-data_client_0 = data_client[data_client["TARGET"]==0]
-data_client_1 = data_client[data_client["TARGET"]==1]
-
-
-nb_echant = min(50,data_client_1.shape[0])
-data_echant = pd.concat([data_client_0[:nb_echant], data_client_1[:nb_echant]]).sort_values(by='SK_ID_CURR')
-data_echant.reset_index(drop=True, inplace=True)
-
-data_client = data_echant.drop(['TARGET'], axis=1)
-references_test = data_echant.SK_ID_CURR
+@st.cache
+def charge_donnees(num_rows, nb_ech):
+    path = "C:\\Users\\toure\\Desktop\\OpenClassrooms\\Projet 7\\donnees\\"
+    
+    data_client = pd.read_csv(path+"donnees_traites.csv", nrows= num_rows)
+    table_indic = pd.read_csv(path+"HomeCredit_columns_description.csv", encoding= 'unicode_escape')
+    
+    data_client_0 = data_client[data_client["TARGET"]==0]
+    data_client_1 = data_client[data_client["TARGET"]==1]
+    
+    nb_echant = min(nb_ech,data_client_1.shape[0])
+    data_echant = pd.concat([data_client_0[:nb_echant], data_client_1[:nb_echant]]).sort_values(by='SK_ID_CURR')
+    data_echant.reset_index(drop=True, inplace=True)
+    
+    data_client = data_echant.drop(['TARGET'], axis=1)
+    references_test = data_echant.SK_ID_CURR
+    
+    return data_client, table_indic, references_test
 
 def main():
-    MODELPREDICT_URI = 'http://127.0.0.1:5000/predict'
+    data_client, table_indic, references_test = charge_donnees(10000, 50)
     
     st.title('Prêt à dépenser: Credit Scoring')
     
@@ -80,12 +69,21 @@ def main():
     
     predict_btn = st.button('Prédire')
     if predict_btn:
-        data = [ref_client]
-        pred = None
-        pred = request_prediction(MODELPREDICT_URI, data)#[0] * 100000
-        st.write(
-            'La probabilité de défaut est de {:.2f}'.format(pred))
+        # Afficher la décision avec la probabilité
+        response = requests.get(
+            "http://127.0.0.1:5000/predict", 
+            data=json.dumps(ref_client))
+             
+        prediction = response.text
         
+        st.write(prediction)
+
+        if '1' in prediction:
+            st.error('Crédit Refusé')
+        else:
+            st.success('Crédit Accordé')
+            
+            
     
     indic = st.checkbox('Plus d\'informations sur les indicateurs?')
     if indic:
