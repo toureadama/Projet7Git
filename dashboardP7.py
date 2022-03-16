@@ -1,35 +1,41 @@
 import pandas as pd
 import numpy as np
 import streamlit as st
+import streamlit.components.v1 as components
 import seaborn as sns
 import matplotlib.pyplot as plt
 import requests
 import lime
 from lime import lime_tabular
 import json
+from urllib.request import urlopen
+import joblib
 
 
 @st.cache
 def charge_donnees(num_rows, nb_ech):
     path = "C:\\Users\\toure\\Desktop\\OpenClassrooms\\Projet 7\\donnees\\"
     
-    data_client = pd.read_csv(path+"donnees_traites.csv", nrows= num_rows)
+    data = pd.read_csv(path+"donnees_traites.csv", nrows= num_rows)
+    data_client_1 = pd.read_csv(path+"donnees_traites_1.csv")
+    colonnes_fr = pd.read_csv(path+"colonnes.csv")
     table_indic = pd.read_csv(path+"HomeCredit_columns_description.csv", encoding= 'unicode_escape')
     
-    data_client_0 = data_client[data_client["TARGET"]==0]
-    data_client_1 = data_client[data_client["TARGET"]==1]
+    data = data[list(colonnes_fr.iloc[:,1])]   
+    data_client_1 = data_client_1[list(colonnes_fr.iloc[:,1])]
     
     nb_echant = min(nb_ech,data_client_1.shape[0])
-    data_echant = pd.concat([data_client_0[:nb_echant], data_client_1[:nb_echant]]).sort_values(by='SK_ID_CURR')
+    data_echant = pd.concat([data[:nb_echant], data_client_1[:nb_echant]])
     data_echant.reset_index(drop=True, inplace=True)
     
     data_client = data_echant.drop(['TARGET'], axis=1)
-    references_test = data_echant.SK_ID_CURR
+    references_test = data_client.SK_ID_CURR
     
-    return data_client, table_indic, references_test
+    return data, data_client, table_indic, references_test
 
 def main():
-    data_client, table_indic, references_test = charge_donnees(10000, 50)
+    data, data_client, table_indic, references_test = charge_donnees(10000, 50)
+    loaded_model = joblib.load('C://Users//toure//Desktop//OpenClassrooms//Projet 7//logreg_housing.joblib')
     
     st.title('Prêt à dépenser: Credit Scoring')
     
@@ -40,7 +46,7 @@ def main():
         list(references_test))
     
     st.sidebar.write("Nombre de crédits dans l'échantillon", 
-                    data_client.shape[1])
+                    len(references_test))
     
     st.sidebar.write("Le montant du crédit", 
                     int(data_client.loc[data_client['SK_ID_CURR']==int(ref_client)]['AMT_CREDIT']))
@@ -65,24 +71,24 @@ def main():
     else:
                        st.sidebar.write("GENRE: ", "M")
     
-        
+    
+    
+    
     
     predict_btn = st.button('Prédire')
     if predict_btn:
-        # Afficher la décision avec la probabilité
-        response = requests.get(
-            "http://127.0.0.1:5000/predict", 
-            data=json.dumps(ref_client))
-             
-        prediction = response.text
+        # Appel de l'API :
+        API_url = "http://127.0.0.1:5000/predict?SK_ID_CURR=" + str(ref_client)
+        with st.spinner('Chargement du score client...'):
+            json_url = urlopen(API_url)
+            prediction = json.loads(json_url.read())
+               
+        st.write("Risque de défaut client : {:.0f} %".format(round((prediction*100), 2)))
         
-        st.write(prediction)
-
-        if '1' in prediction:
-            st.error('Crédit Refusé')
+        if prediction <= 0.5:
+            st.markdown("<h2 style='text-align: center;color: green'>Crédit accordé</h2>", unsafe_allow_html=True)
         else:
-            st.success('Crédit Accordé')
-            
+            st.markdown("<h2 style='text-align: center;color: red'>Crédit réfusé</h2>", unsafe_allow_html=True)
             
     
     indic = st.checkbox('Plus d\'informations sur les indicateurs?')
@@ -101,16 +107,18 @@ def main():
                                               feature_names=data_client.columns,
                                              )
         exp = explainer.explain_instance(
-            data_row=data_client.iloc[100], 
+            data_row=data_client.iloc[0], 
             predict_fn=loaded_model.predict_proba
             )
-        exp.show_in_notebook(show_table=True)
+        #exp.show_in_notebook(show_table=True)
+        html = exp.as_html()
+        components.html(html, height=800)
     
     comparatif = st.checkbox('Positionnement dans l\'échantillon')
     
     if comparatif:
         # La pyramide des âges des emprunteurs
-        X = round(abs(data_client['DAYS_BIRTH'] / (365)))
+        X = round(abs(data['DAYS_BIRTH'] / (365)))
         fig2 = plt.figure(figsize =(10, 6))
         sns.histplot(data= data_client, x = X, color = "blue")
         #sns.histplot(data= data_client, x = data_client.loc[data_client['SK_ID_CURR']==int(ref_client)]['DAYS_BIRTH']/ (365), color='green')
@@ -137,7 +145,7 @@ def main():
         X = round(abs(data_client['DAYS_EMPLOYED'] / (365)))
         fig3 = plt.subplots(figsize =(10, 6))
         sns.histplot(data= data_client, x = X, color = 'green')
-        plt.axvspan(data_client.loc[data_client['SK_ID_CURR']==int(ref_client)]['DAYS_EMPLOYED']/ (365), facecolor='g', alpha=0.5)
+        #plt.axvspan(data_client.loc[data_client['SK_ID_CURR']==int(ref_client)]['DAYS_EMPLOYED']/ (365), facecolor='g', alpha=0.5)
         plt.title('Distribution du nombre d\'années professionnelles des emprunteurs')
         plt.xlabel('Années')
         plt.xlim(0, 40)

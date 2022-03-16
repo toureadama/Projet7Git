@@ -17,19 +17,18 @@ loaded_model = joblib.load('C://Users//toure//Desktop//OpenClassrooms//Projet 7/
 
 #************test*********************
 num_rows = 10000
-data_client = pd.read_csv(path+"donnees_traites.csv", nrows= num_rows)
+data = pd.read_csv(path+"donnees_traites.csv", nrows= num_rows)
+data_client_1 = pd.read_csv(path+"donnees_traites_1.csv")
 colonnes_fr = pd.read_csv(path+"colonnes.csv")
-data_client = data_client[list(colonnes_fr.iloc[:,1])]
 
-data_client_0 = data_client[data_client["TARGET"]==0]
-data_client_1 = data_client[data_client["TARGET"]==1]
+data = data[list(colonnes_fr.iloc[:,1])]
+data_client_1 = data_client_1[list(colonnes_fr.iloc[:,1])]
 
-nb_echant = min(50,data_client_1.shape[0])
-data_echant = pd.concat([data_client_0[:nb_echant], data_client_1[:nb_echant]]).sort_values(by='SK_ID_CURR')
-data_echant.reset_index(drop=True, inplace=True)
+data_client = pd.concat([data, data_client_1])
+data_client.reset_index(drop=True, inplace=True)
 
-data_client = data_echant.drop(['TARGET'], axis=1)
-references_test = data_echant.SK_ID_CURR
+data_client = data_client.drop(['TARGET'], axis=1)
+references_test = data_client.SK_ID_CURR
 #*************************************
 
 
